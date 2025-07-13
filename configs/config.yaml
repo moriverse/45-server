@@ -1,0 +1,10 @@
+server:
+  port: "8080"
+  mode: "debug" # gin mode: debug, release
+
+database:
+  dsn: "host=localhost user=dev password=dev dbname=siwu port=5432 sslmode=disable TimeZone=Asia/Shanghai"
+
+jwt:
+  secret_key: "your-super-secret-key-that-is-long-and-secure"
+  expires_in_hours: 72 
