@@ -11,16 +11,7 @@ import (
 )
 
 // AuthMiddleware creates a gin middleware for JWT authentication.
-func AuthMiddleware() gin.HandlerFunc {
-	// In a real app, you'd load the config once at startup.
-	// For simplicity, we'll load it here, but be aware of the performance implications.
-	cfg, err := config.LoadConfig() // This might need adjustment based on your config loading strategy
-	if err != nil {
-		// A more robust solution would be to panic or log fatally
-		// if the config can't be loaded at startup.
-		panic("Could not load configuration for middleware")
-	}
-
+func AuthMiddleware(cfg config.JWTConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
@@ -42,12 +33,9 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		tokenString := headerParts[1]
 
-		claims, err := auth.ValidateToken(tokenString, cfg.JWT.SecretKey)
+		claims, err := auth.ValidateToken(tokenString, cfg.SecretKey)
 		if err != nil {
-			c.AbortWithStatusJSON(
-				http.StatusUnauthorized,
-				gin.H{"error": "Invalid token"},
-			)
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
 			return
 		}
 

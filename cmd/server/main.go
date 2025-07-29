@@ -3,11 +3,7 @@ package main
 import (
 	"log"
 
-	"github.com/gin-gonic/gin"
-
 	"github.com/moriverse/45-server/internal/infrastructure/config"
-	"github.com/moriverse/45-server/internal/infrastructure/persistence"
-	"github.com/moriverse/45-server/internal/infrastructure/web/middleware"
 )
 
 func main() {
@@ -17,29 +13,14 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	// Initialize database
-	_, err = persistence.NewDB(cfg.Database)
+	// Initialize the application
+	app, err := InitializeApp(cfg)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
-	}
-
-	// Initialize Gin router
-	router := gin.Default()
-
-	// Public route
-	router.GET("/ping", func(c *gin.Context) {
-		c.JSON(200, gin.H{"message": "pong"})
-	})
-
-	// Private route group
-	v1 := router.Group("/api/v1")
-	v1.Use(middleware.AuthMiddleware())
-	{
-		// User routes will be added here
+		log.Fatalf("Failed to initialize application: %v", err)
 	}
 
 	// Start the server
-	if err := router.Run(":" + cfg.Server.Port); err != nil {
+	if err := app.Run(":" + cfg.Server.Port); err != nil {
 		log.Fatalf("Failed to run server: %v", err)
 	}
 }
