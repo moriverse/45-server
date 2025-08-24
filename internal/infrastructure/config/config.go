@@ -24,15 +24,14 @@ type JWTConfig struct {
 	ExpiresInHours int    `mapstructure:"expires_in_hours"`
 }
 
-func LoadConfig() (config Config, err error) {
-	viper.AddConfigPath("./configs")
+func LoadConfig(path string) (config Config, err error) {
+	viper.AddConfigPath(path)
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 
 	viper.AutomaticEnv()
 
-	err = viper.ReadInConfig()
-	if err != nil {
+	if err = viper.ReadInConfig(); err != nil {
 		return
 	}
 
