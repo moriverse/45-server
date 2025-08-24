@@ -11,7 +11,7 @@ import (
 	appUser "github.com/moriverse/45-server/internal/app/user"
 	"github.com/moriverse/45-server/internal/domain/user"
 	"github.com/moriverse/45-server/internal/infrastructure/config"
-	pkgAuth "github.com/moriverse/45-server/pkg/auth"
+	"github.com/moriverse/45-server/internal/utils"
 )
 
 const (
@@ -20,21 +20,21 @@ const (
 
 // Middleware encapsulates all middleware logic and dependencies.
 type Middleware struct {
-	activityService *appUser.ActivityService
-	jwtConfig       config.JWTConfig
-	logger          *slog.Logger
+	userService *appUser.Service
+	jwtConfig   config.JWTConfig
+	logger      *slog.Logger
 }
 
 // NewMiddleware creates a new Middleware instance.
 func NewMiddleware(
-	activityService *appUser.ActivityService,
+	userService *appUser.Service,
 	jwtConfig config.JWTConfig,
 	logger *slog.Logger,
 ) *Middleware {
 	return &Middleware{
-		activityService: activityService,
-		jwtConfig:       jwtConfig,
-		logger:          logger,
+		userService: userService,
+		jwtConfig:   jwtConfig,
+		logger:      logger,
 	}
 }
 
@@ -99,7 +99,7 @@ func (m *Middleware) AuthMiddleware() gin.HandlerFunc {
 		}
 
 		tokenString := parts[1]
-		claims, err := pkgAuth.ValidateToken(tokenString, m.jwtConfig.SecretKey)
+		claims, err := utils.ValidateToken(tokenString, m.jwtConfig.SecretKey)
 		if err != nil {
 			c.AbortWithStatusJSON(
 				http.StatusUnauthorized,
@@ -113,7 +113,7 @@ func (m *Middleware) AuthMiddleware() gin.HandlerFunc {
 
 		// Update user's last active time
 		userID := user.UserID(claims.Subject)
-		m.activityService.UpdateLastActive(c.Request.Context(), userID)
+		m.userService.UpdateLastActive(c.Request.Context(), userID)
 
 		c.Next()
 	}

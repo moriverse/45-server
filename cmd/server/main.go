@@ -13,6 +13,7 @@ import (
 	"github.com/moriverse/45-server/internal/infrastructure/logger"
 	"github.com/moriverse/45-server/internal/infrastructure/persistence"
 	"github.com/moriverse/45-server/internal/infrastructure/persistence/repository"
+	"github.com/moriverse/45-server/internal/infrastructure/wechat"
 	"github.com/moriverse/45-server/internal/infrastructure/web"
 	"github.com/moriverse/45-server/internal/infrastructure/web/handler"
 	"github.com/moriverse/45-server/internal/infrastructure/web/middleware"
@@ -51,6 +52,7 @@ func InitializeApp(cfg config.Config, appLogger *slog.Logger) (*gin.Engine, erro
 	}
 
 	redisClient := cache.NewRedisClient(cfg.Redis)
+	wechatClient := wechat.NewClient()
 
 	userRepo := repository.NewUserRepository(db)
 	authRepo := repository.NewAuthRepository(db)
@@ -58,13 +60,12 @@ func InitializeApp(cfg config.Config, appLogger *slog.Logger) (*gin.Engine, erro
 	uow := persistence.NewUnitOfWork(db, userRepo, authRepo)
 
 	// Initialize services
-	authService := auth.NewService(uow, cfg.JWT)
-	activityService := user.NewActivityService(redisClient, userRepo, appLogger)
-	_ = user.NewService(userRepo) // Main user service
+	authService := auth.NewService(uow, cfg.JWT, wechatClient)
+	userService := user.NewService(userRepo, redisClient, appLogger)
 
 	// Initialize handlers and middleware
 	authHandler := handler.NewAuthHandler(authService)
-	mw := middleware.NewMiddleware(activityService, cfg.JWT, appLogger)
+	mw := middleware.NewMiddleware(userService, cfg.JWT, appLogger)
 
 	return web.NewRouter(authHandler, mw, cfg), nil
 }

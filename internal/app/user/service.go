@@ -2,47 +2,71 @@ package user
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/go-redis/redis/v8"
 	"github.com/moriverse/45-server/internal/domain/user"
+)
+
+const (
+	lastActiveCacheKeyPrefix = "last-active"
+	lastActiveCacheTTL       = 5 * time.Minute
 )
 
 // Service is the application service for user-related operations.
 type Service struct {
-	userRepo user.Repository
+	userRepo    user.Repository
+	redisClient *redis.Client
+	logger      *slog.Logger
 }
 
 // NewService creates a new instance of the user service.
-func NewService(userRepo user.Repository) *Service {
-	return &Service{userRepo: userRepo}
+func NewService(
+	userRepo user.Repository,
+	redisClient *redis.Client,
+	logger *slog.Logger,
+) *Service {
+	return &Service{
+		userRepo:    userRepo,
+		redisClient: redisClient,
+		logger:      logger,
+	}
 }
 
-// CreateUserParams contains the parameters for creating a new user.
-type CreateUserParams struct {
-	Username    string
-	Email       string
-	PhoneNumber string
-	AvatarURL   string
-	Source      user.Source
-}
+// UpdateLastActive updates a user's last active time if the configured TTL has passed.
+// It uses Redis for caching to avoid hitting the database on every request.
+func (s *Service) UpdateLastActive(ctx context.Context, userID user.UserID) {
+	key := fmt.Sprintf("%s:%s", lastActiveCacheKeyPrefix, userID)
 
-// CreateUser creates a new user.
-func (s *Service) CreateUser(ctx context.Context, params CreateUserParams) (*user.User, error) {
-	now := time.Now()
-	newUser := &user.User{
-		ID:          user.UserID(uuid.New().String()),
-		Email:       params.Email,
-		PhoneNumber: params.PhoneNumber,
-		AvatarURL:   params.AvatarURL,
-		Source:      params.Source,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+	// SetNX returns true if the key was set, false if it already existed.
+	wasSet, err := s.redisClient.SetNX(ctx, key, "active", lastActiveCacheTTL).Result()
+	if err != nil {
+		s.logger.Error(
+			"Failed to set last active cache key",
+			"user_id", userID,
+			"error", err,
+		)
+		return
 	}
 
-	if err := s.userRepo.Create(ctx, newUser); err != nil {
-		return nil, err
+	// If the key was set, it means this is the first request in the TTL window,
+	// so we should update the database.
+	if wasSet {
+		go func() {
+			// We use a background context because the original request context might be cancelled.
+			if err := s.userRepo.UpdateLastActiveAt(
+				context.Background(),
+				userID,
+				time.Now(),
+			); err != nil {
+				s.logger.Error(
+					"Failed to update last active time in database",
+					"user_id", userID,
+					"error", err,
+				)
+			}
+		}()
 	}
-
-	return newUser, nil
 }

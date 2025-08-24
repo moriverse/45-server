@@ -18,7 +18,6 @@ const (
 
 type User struct {
 	ID           UserID
-	Email        string
 	PhoneNumber  string
 	AvatarURL    string
 	Source       Source

@@ -11,7 +11,6 @@ type AuthID string
 type Provider string
 
 const (
-	Email  Provider = "email"
 	Phone  Provider = "phone"
 	Wechat Provider = "wechat"
 	Google Provider = "google"

@@ -43,18 +43,6 @@ func (r *UserRepository) FindByID(ctx context.Context, id user.UserID) (*user.Us
 	return toUserDomain(&model), nil
 }
 
-// FindByEmail finds a user by their email address.
-func (r *UserRepository) FindByEmail(ctx context.Context, email string) (*user.User, error) {
-	var model models.User
-	if err := r.db.WithContext(ctx).First(&model, "email = ?", email).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, nil // Or a custom not found error
-		}
-		return nil, err
-	}
-	return toUserDomain(&model), nil
-}
-
 // FindByPhoneNumber finds a user by their phone number.
 func (r *UserRepository) FindByPhoneNumber(
 	ctx context.Context,
@@ -96,7 +84,6 @@ func (r *UserRepository) UpdateLastActiveAt(ctx context.Context, id user.UserID,
 func toUserModel(u *user.User) *models.User {
 	return &models.User{
 		ID:           string(u.ID),
-		Email:        u.Email,
 		PhoneNumber:  u.PhoneNumber,
 		AvatarURL:    u.AvatarURL,
 		Source:       string(u.Source),
@@ -112,7 +99,6 @@ func toUserModel(u *user.User) *models.User {
 func toUserDomain(m *models.User) *user.User {
 	return &user.User{
 		ID:           user.UserID(m.ID),
-		Email:        m.Email,
 		PhoneNumber:  m.PhoneNumber,
 		AvatarURL:    m.AvatarURL,
 		Source:       user.Source(m.Source),

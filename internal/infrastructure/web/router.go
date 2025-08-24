@@ -22,10 +22,7 @@ func NewRouter(authHandler *handler.AuthHandler, mw *middleware.Middleware, cfg 
 	// Auth routes
 	authRoutes := router.Group("/auth")
 	{
-		authRoutes.POST("/register", authHandler.Register)
-		authRoutes.POST("/login", func(c *gin.Context) {
-			c.JSON(200, gin.H{"message": "login placeholder"})
-		})
+		authRoutes.POST("/login", authHandler.Login)
 	}
 
 	// Private route group

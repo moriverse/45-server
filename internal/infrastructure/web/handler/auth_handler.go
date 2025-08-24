@@ -21,75 +21,29 @@ func NewAuthHandler(authService *authService.Service) *AuthHandler {
 	return &AuthHandler{authService: authService}
 }
 
-// RegisterRequest defines the flexible request body for user registration.
-type RegisterRequest struct {
+// LoginRequest defines the flexible request body for user login.
+type LoginRequest struct {
 	Provider    string                 `json:"provider" binding:"required"`
 	Credentials map[string]interface{} `json:"credentials" binding:"required"`
-	Profile     map[string]interface{} `json:"profile"` // Optional profile data
 }
 
-// Register handles the HTTP request for user registration.
-func (h *AuthHandler) Register(c *gin.Context) {
-	var req RegisterRequest
+// Login handles the HTTP request for user login or seamless registration.
+func (h *AuthHandler) Login(c *gin.Context) {
+	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apiErr := response.APIError{
+		response.Error(c, http.StatusBadRequest, response.APIError{
 			Code:    "INVALID_REQUEST_BODY",
 			Message: err.Error(),
-		}
-		response.Error(c, http.StatusBadRequest, apiErr)
+		})
 		return
 	}
 
-	var result *authService.RegisterResult
+	provider := authDomain.Provider(req.Provider)
+
+	var result *authService.RegisterResult // Login and Register return the same result
 	var err error
 
-	switch authDomain.Provider(req.Provider) {
-	case authDomain.Email:
-		email, ok := req.Credentials["email"].(string)
-		if !ok {
-			response.Error(c, http.StatusBadRequest, response.APIError{
-				Code:    "INVALID_CREDENTIALS",
-				Message: "Email is required and must be a string.",
-			})
-			return
-		}
-		password, ok := req.Credentials["password"].(string)
-		if !ok {
-			response.Error(c, http.StatusBadRequest, response.APIError{
-				Code:    "INVALID_CREDENTIALS",
-				Message: "Password is required and must be a string.",
-			})
-			return
-		}
-		params := authService.RegisterWithEmailParams{
-			Email:    email,
-			Password: password,
-		}
-		result, err = h.authService.RegisterWithEmail(c.Request.Context(), params)
-
-	case authDomain.Phone:
-		phone, ok := req.Credentials["phone"].(string)
-		if !ok {
-			response.Error(c, http.StatusBadRequest, response.APIError{
-				Code:    "INVALID_CREDENTIALS",
-				Message: "Phone is required and must be a string.",
-			})
-			return
-		}
-		code, ok := req.Credentials["code"].(string)
-		if !ok {
-			response.Error(c, http.StatusBadRequest, response.APIError{
-				Code:    "INVALID_CREDENTIALS",
-				Message: "Code is required and must be a string.",
-			})
-			return
-		}
-		params := authService.RegisterWithPhoneParams{
-			PhoneNumber: phone,
-			Code:        code,
-		}
-		result, err = h.authService.RegisterWithPhone(c.Request.Context(), params)
-
+	switch provider {
 	case authDomain.Wechat:
 		code, ok := req.Credentials["code"].(string)
 		if !ok {
@@ -99,10 +53,19 @@ func (h *AuthHandler) Register(c *gin.Context) {
 			})
 			return
 		}
-		params := authService.RegisterWithWechatParams{
+		params := authService.LoginOrRegisterWithWechatParams{
 			Code: code,
+			// Source can be set here
 		}
-		result, err = h.authService.RegisterWithWechat(c.Request.Context(), params)
+		result, err = h.authService.LoginOrRegisterWithWechat(c.Request.Context(), params)
+
+	// TODO: Add case for phone login
+	case authDomain.Phone:
+		response.Error(c, http.StatusNotImplemented, response.APIError{
+			Code:    "NOT_IMPLEMENTED",
+			Message: "This login provider is not yet implemented.",
+		})
+		return
 
 	default:
 		response.Error(c, http.StatusBadRequest, response.APIError{
@@ -117,7 +80,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	response.Data(c, http.StatusCreated, gin.H{
+	response.Data(c, http.StatusOK, gin.H{
 		"user":  result.User,
 		"token": result.Token,
 	})
