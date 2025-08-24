@@ -13,7 +13,7 @@ func GenerateToken(userID string, secretKey string, expiresInHours int) (string,
 		Subject:   userID,
 		ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(expiresInHours) * time.Hour)),
 		IssuedAt:  jwt.NewNumericDate(time.Now()),
-		Issuer:    "morigin-server",
+		Issuer:    "45ai",
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

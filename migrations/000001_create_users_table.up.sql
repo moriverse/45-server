@@ -9,7 +9,6 @@ CREATE TYPE user_source AS ENUM (
 
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY,
-    username VARCHAR(255) NOT NULL UNIQUE,
     email VARCHAR(255) UNIQUE,
     phone_number VARCHAR(255) UNIQUE,
     avatar_url VARCHAR(255),

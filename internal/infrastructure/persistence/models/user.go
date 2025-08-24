@@ -7,7 +7,6 @@ import (
 // User is the persistence model for the users table.
 type User struct {
 	ID           string     `gorm:"primaryKey;type:uuid"`
-	Username     string     `gorm:"unique"`
 	Email        string     `gorm:"unique"`
 	PhoneNumber  string     `gorm:"column:phone_number;unique"`
 	AvatarURL    string     `gorm:"column:avatar_url"`

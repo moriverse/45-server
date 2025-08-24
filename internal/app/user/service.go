@@ -32,7 +32,6 @@ func (s *Service) CreateUser(ctx context.Context, params CreateUserParams) (*use
 	now := time.Now()
 	newUser := &user.User{
 		ID:          user.UserID(uuid.New().String()),
-		Username:    params.Username,
 		Email:       params.Email,
 		PhoneNumber: params.PhoneNumber,
 		AvatarURL:   params.AvatarURL,

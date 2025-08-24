@@ -18,7 +18,11 @@ type gormUnitOfWork struct {
 }
 
 // NewUnitOfWork creates a new GORM UnitOfWork.
-func NewUnitOfWork(db *gorm.DB, userRepo user.Repository, authRepo auth.Repository) unitofwork.UnitOfWork {
+func NewUnitOfWork(
+	db *gorm.DB,
+	userRepo user.Repository,
+	authRepo auth.Repository,
+) unitofwork.UnitOfWork {
 	return &gormUnitOfWork{
 		db:       db,
 		userRepo: userRepo,
@@ -27,7 +31,10 @@ func NewUnitOfWork(db *gorm.DB, userRepo user.Repository, authRepo auth.Reposito
 }
 
 // Execute runs the given function in a single database transaction.
-func (uow *gormUnitOfWork) Execute(ctx context.Context, fn func(work unitofwork.UserAuthWork) error) error {
+func (uow *gormUnitOfWork) Execute(
+	ctx context.Context,
+	fn func(work unitofwork.UserAuthWork) error,
+) error {
 	return uow.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		work := &gormUserAuthWork{
 			userRepo: uow.userRepo.WithTx(tx),

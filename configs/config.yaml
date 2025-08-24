@@ -7,4 +7,13 @@ database:
 
 jwt:
   secret_key: "your-super-secret-key-that-is-long-and-secure"
-  expires_in_hours: 72 
+  expires_in_hours: 72
+
+redis:
+  addr: "localhost:6379"
+  password: ""
+  db: 0
+
+log:
+  level: "debug" # debug, info, warn, error
+  format: "text" # text or json 

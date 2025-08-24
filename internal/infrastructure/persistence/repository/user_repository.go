@@ -20,7 +20,8 @@ func NewUserRepository(db *gorm.DB) *UserRepository {
 	return &UserRepository{db: db}
 }
 
-// WithTx returns a new instance of the repository with the database connection set to the given transaction.
+// WithTx returns a new instance of the repository with the database connection set to the
+// given transaction.
 func (r *UserRepository) WithTx(tx *gorm.DB) user.Repository {
 	return &UserRepository{db: tx}
 }
@@ -55,9 +56,14 @@ func (r *UserRepository) FindByEmail(ctx context.Context, email string) (*user.U
 }
 
 // FindByPhoneNumber finds a user by their phone number.
-func (r *UserRepository) FindByPhoneNumber(ctx context.Context, phoneNumber string) (*user.User, error) {
+func (r *UserRepository) FindByPhoneNumber(
+	ctx context.Context,
+	phoneNumber string,
+) (*user.User, error) {
 	var model models.User
-	if err := r.db.WithContext(ctx).First(&model, "phone_number = ?", phoneNumber).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(
+		&model, "phone_number = ?", phoneNumber,
+	).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, nil // Or a custom not found error
 		}
@@ -74,14 +80,22 @@ func (r *UserRepository) Update(ctx context.Context, u *user.User) error {
 
 // Delete marks a user as deleted in the database.
 func (r *UserRepository) Delete(ctx context.Context, id user.UserID) error {
-	return r.db.WithContext(ctx).Model(&models.User{}).Where("id = ?", string(id)).Update("deleted_at", time.Now()).Error
+	return r.db.WithContext(ctx).Model(&models.User{}).
+		Where("id = ?", string(id)).
+		Update("deleted_at", time.Now()).Error
+}
+
+// UpdateLastActiveAt updates the last_active_at timestamp for a user.
+func (r *UserRepository) UpdateLastActiveAt(ctx context.Context, id user.UserID, t time.Time) error {
+	return r.db.WithContext(ctx).Model(&models.User{}).
+		Where("id = ?", string(id)).
+		Update("last_active_at", t).Error
 }
 
 // toUserModel converts a domain user to a GORM user model.
 func toUserModel(u *user.User) *models.User {
 	return &models.User{
 		ID:           string(u.ID),
-		Username:     u.Username,
 		Email:        u.Email,
 		PhoneNumber:  u.PhoneNumber,
 		AvatarURL:    u.AvatarURL,
@@ -98,7 +112,6 @@ func toUserModel(u *user.User) *models.User {
 func toUserDomain(m *models.User) *user.User {
 	return &user.User{
 		ID:           user.UserID(m.ID),
-		Username:     m.Username,
 		Email:        m.Email,
 		PhoneNumber:  m.PhoneNumber,
 		AvatarURL:    m.AvatarURL,

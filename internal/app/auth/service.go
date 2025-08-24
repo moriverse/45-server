@@ -8,11 +8,11 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
-	pkgAuth "github.com/moriverse/45-server/pkg/auth"
 	"github.com/moriverse/45-server/internal/domain/auth"
-	"github.com/moriverse/45-server/internal/domain/user"
 	"github.com/moriverse/45-server/internal/domain/unitofwork"
+	"github.com/moriverse/45-server/internal/domain/user"
 	"github.com/moriverse/45-server/internal/infrastructure/config"
+	pkgAuth "github.com/moriverse/45-server/pkg/auth"
 )
 
 // Service is the application service for authentication-related operations.
@@ -26,22 +26,25 @@ func NewService(uow unitofwork.UnitOfWork, jwtConfig config.JWTConfig) *Service 
 	return &Service{uow: uow, jwtConfig: jwtConfig}
 }
 
-// RegisterUserParams contains the parameters for registering a new user.
-type RegisterUserParams struct {
-	Username string
+// RegisterWithEmailParams contains the parameters for registering a new user with email.
+type RegisterWithEmailParams struct {
 	Email    string
 	Password string
 	Source   user.Source
 }
 
-// RegisterUserResult contains the result of a successful user registration.
-type RegisterUserResult struct {
+// RegisterResult contains the result of a successful user registration.
+type RegisterResult struct {
 	User  *user.User
 	Token string
 }
 
-// RegisterUser creates a new user and an auth record for them, and returns a JWT.
-func (s *Service) RegisterUser(ctx context.Context, params RegisterUserParams) (*RegisterUserResult, error) {
+// RegisterWithEmail creates a new user and an auth record for them using email and password,
+// and returns a JWT.
+func (s *Service) RegisterWithEmail(
+	ctx context.Context,
+	params RegisterWithEmailParams,
+) (*RegisterResult, error) {
 	var newUser *user.User
 
 	err := s.uow.Execute(ctx, func(work unitofwork.UserAuthWork) error {
@@ -55,7 +58,10 @@ func (s *Service) RegisterUser(ctx context.Context, params RegisterUserParams) (
 		}
 
 		// 2. Hash the password
-		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(params.Password), bcrypt.DefaultCost)
+		hashedPassword, err := bcrypt.GenerateFromPassword(
+			[]byte(params.Password),
+			bcrypt.DefaultCost,
+		)
 		if err != nil {
 			return err
 		}
@@ -64,7 +70,6 @@ func (s *Service) RegisterUser(ctx context.Context, params RegisterUserParams) (
 		now := time.Now()
 		newUser = &user.User{
 			ID:        user.UserID(uuid.New().String()),
-			Username:  params.Username,
 			Email:     params.Email,
 			Source:    params.Source,
 			CreatedAt: now,
@@ -72,13 +77,13 @@ func (s *Service) RegisterUser(ctx context.Context, params RegisterUserParams) (
 		}
 
 		newAuth := &auth.Auth{
-			ID:             auth.AuthID(uuid.New().String()),
-			UserID:         newUser.ID,
-			Provider:       auth.Email,
-			ProviderUserID: params.Email,
-			PasswordHash:   string(hashedPassword),
-			CreatedAt:      now,
-			UpdatedAt:      now,
+			ID:           auth.AuthID(uuid.New().String()),
+			UserID:       newUser.ID,
+			Provider:     auth.Email,
+			ProviderID:   params.Email,
+			PasswordHash: string(hashedPassword),
+			CreatedAt:    now,
+			UpdatedAt:    now,
 		}
 
 		// 4. Save the new user and auth records
@@ -94,12 +99,56 @@ func (s *Service) RegisterUser(ctx context.Context, params RegisterUserParams) (
 	}
 
 	// 5. Generate JWT
-	token, err := pkgAuth.GenerateToken(string(newUser.ID), s.jwtConfig.SecretKey, s.jwtConfig.ExpiresInHours)
+	token, err := pkgAuth.GenerateToken(
+		string(newUser.ID),
+		s.jwtConfig.SecretKey,
+		s.jwtConfig.ExpiresInHours,
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	return &RegisterUserResult{User: newUser, Token: token}, nil
+	return &RegisterResult{User: newUser, Token: token}, nil
+}
+
+// RegisterWithPhoneParams contains the parameters for registering a new user with a phone number.
+type RegisterWithPhoneParams struct {
+	PhoneNumber string
+	Code        string
+	Source      user.Source
+}
+
+// RegisterWithPhone creates a new user and an auth record for them using a phone number and
+// verification code.
+func (s *Service) RegisterWithPhone(
+	ctx context.Context,
+	params RegisterWithPhoneParams,
+) (*RegisterResult, error) {
+	// TODO: Implement phone registration logic
+	// 1. Verify the code
+	// 2. Check if user with phone number already exists
+	// 3. Create user and auth records
+	// 4. Generate JWT
+	return nil, errors.New("phone registration not implemented")
+}
+
+// RegisterWithWechatParams contains the parameters for registering a new user via Wechat.
+type RegisterWithWechatParams struct {
+	Code   string // The code from Wechat OAuth
+	Source user.Source
+}
+
+// RegisterWithWechat creates a new user and an auth record for them using a Wechat OAuth code.
+func (s *Service) RegisterWithWechat(
+	ctx context.Context,
+	params RegisterWithWechatParams,
+) (*RegisterResult, error) {
+	// TODO: Implement Wechat registration logic
+	// 1. Exchange code for openID with Wechat API
+	// 2. Check if user with openID already exists
+	// 3. Create user and auth records
+	// 4. Generate JWT
+	return nil, errors.New("wechat registration not implemented")
 }
 
 // LoginParams contains the parameters for logging in.
@@ -130,7 +179,10 @@ func (s *Service) Login(ctx context.Context, params LoginParams) (*LoginResult, 
 		}
 
 		// 2. Compare the password hash
-		if err := bcrypt.CompareHashAndPassword([]byte(a.PasswordHash), []byte(params.Password)); err != nil {
+		if err := bcrypt.CompareHashAndPassword(
+			[]byte(a.PasswordHash),
+			[]byte(params.Password),
+		); err != nil {
 			return ErrInvalidCredentials
 		}
 
@@ -152,7 +204,11 @@ func (s *Service) Login(ctx context.Context, params LoginParams) (*LoginResult, 
 	}
 
 	// 4. Generate JWT
-	token, err = pkgAuth.GenerateToken(string(u.ID), s.jwtConfig.SecretKey, s.jwtConfig.ExpiresInHours)
+	token, err = pkgAuth.GenerateToken(
+		string(u.ID),
+		s.jwtConfig.SecretKey,
+		s.jwtConfig.ExpiresInHours,
+	)
 	if err != nil {
 		return nil, err
 	}
