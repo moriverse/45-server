@@ -1,38 +1,42 @@
 package handler
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	authService "github.com/moriverse/45-server/internal/app/auth"
 	authDomain "github.com/moriverse/45-server/internal/domain/auth"
-	"github.com/moriverse/45-server/internal/infrastructure/web/middleware"
+	domainErrors "github.com/moriverse/45-server/internal/domain/errors"
+	"github.com/moriverse/45-server/internal/domain/user"
+	"github.com/moriverse/45-server/internal/infrastructure/web/context"
 	"github.com/moriverse/45-server/internal/infrastructure/web/response"
 )
 
-// AuthHandler handles authentication-related HTTP requests.
 type AuthHandler struct {
-	authService *authService.Service
+	authService authService.AuthService
 }
 
-// NewAuthHandler creates a new instance of AuthHandler.
-func NewAuthHandler(authService *authService.Service) *AuthHandler {
+func NewAuthHandler(authService authService.AuthService) *AuthHandler {
 	return &AuthHandler{authService: authService}
 }
 
-// LoginRequest defines the flexible request body for user login.
+func (h *AuthHandler) RegisterRoutes(router *gin.RouterGroup) {
+	router.POST("/login", h.Login)
+}
+
 type LoginRequest struct {
 	Provider    string                 `json:"provider" binding:"required"`
 	Credentials map[string]interface{} `json:"credentials" binding:"required"`
+	Source      user.Source            `json:"source"`
 }
 
-// Login handles the HTTP request for user login or seamless registration.
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, http.StatusBadRequest, response.APIError{
-			Code:    "INVALID_REQUEST_BODY",
+			Code:    response.CodeInvalidRequestBody,
 			Message: err.Error(),
 		})
 		return
@@ -40,7 +44,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	provider := authDomain.Provider(req.Provider)
 
-	var result *authService.RegisterResult // Login and Register return the same result
+	var result *authService.LoginOrRegisterResult
 	var err error
 
 	switch provider {
@@ -48,28 +52,20 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		code, ok := req.Credentials["code"].(string)
 		if !ok {
 			response.Error(c, http.StatusBadRequest, response.APIError{
-				Code:    "INVALID_CREDENTIALS",
-				Message: "Code is required and must be a string.",
+				Code:    response.CodeInvalidCredentials,
+				Message: "Wechat provider requires a 'code' string credential.",
 			})
 			return
 		}
 		params := authService.LoginOrRegisterWithWechatParams{
-			Code: code,
-			// Source can be set here
+			Code:   code,
+			Source: req.Source,
 		}
 		result, err = h.authService.LoginOrRegisterWithWechat(c.Request.Context(), params)
 
-	// TODO: Add case for phone login
-	case authDomain.Phone:
-		response.Error(c, http.StatusNotImplemented, response.APIError{
-			Code:    "NOT_IMPLEMENTED",
-			Message: "This login provider is not yet implemented.",
-		})
-		return
-
 	default:
 		response.Error(c, http.StatusBadRequest, response.APIError{
-			Code:    "INVALID_PROVIDER",
+			Code:    response.CodeInvalidProvider,
 			Message: "The specified provider is not supported.",
 		})
 		return
@@ -81,32 +77,31 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	response.Data(c, http.StatusOK, gin.H{
-		"user":  result.User,
-		"token": result.Token,
+		"user":    result.User,
+		"token":   result.Token,
+		"newUser": result.NewUser,
 	})
 }
 
 func (h *AuthHandler) handleError(c *gin.Context, err error) {
-	logger, _ := c.Get(middleware.LoggerKey)
-	requestLogger, ok := logger.(*slog.Logger)
+	requestLogger, ok := context.GetLogger(c)
 	if !ok {
-		// Fallback to a default logger if the one in the context is not valid
 		requestLogger = slog.Default()
 	}
 
-	// We check for specific, known application errors first.
-	switch err {
-	case authService.ErrUserAlreadyExists:
-		response.Error(c, http.StatusConflict, response.APIError{
-			Code:    "USER_ALREADY_EXISTS",
-			Message: "A user with this identity already exists.",
-		})
-	default:
-		// For unhandled or unexpected errors, log them and return a generic 500.
-		requestLogger.Error("Unhandled API error", "error", err)
+	var dataInconsistencyErr domainErrors.DataInconsistencyError
+	if errors.As(err, &dataInconsistencyErr) {
+		requestLogger.Error("Critical data inconsistency detected", "error", err)
 		response.Error(c, http.StatusInternalServerError, response.APIError{
-			Code:    "INTERNAL_SERVER_ERROR",
-			Message: "An unexpected error occurred on our end.",
+			Code:    response.CodeInternalError,
+			Message: "An unexpected error occurred during login.",
 		})
+		return
 	}
+
+	requestLogger.Warn("Login failed", "error", err)
+	response.Error(c, http.StatusInternalServerError, response.APIError{
+		Code:    response.CodeInternalError,
+		Message: "An unexpected error occurred during login.",
+	})
 }

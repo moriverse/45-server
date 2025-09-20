@@ -10,6 +10,7 @@ type Config struct {
 	JWT      JWTConfig
 	Redis    RedisConfig
 	Log      LogConfig
+	Wechat   WechatConfig
 }
 
 type ServerConfig struct {
@@ -35,6 +36,13 @@ type RedisConfig struct {
 type LogConfig struct {
 	Level  string
 	Format string
+}
+
+type WechatConfig struct {
+	AppID            string `mapstructure:"app_id"`
+	AppSecret        string `mapstructure:"app_secret"`
+	Host             string `mapstructure:"host"`
+	Code2SessionPath string `mapstructure:"code2session_path"`
 }
 
 func LoadConfig(path string) (config Config, err error) {

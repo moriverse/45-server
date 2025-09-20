@@ -8,7 +8,12 @@ import (
 	"github.com/moriverse/45-server/internal/infrastructure/web/middleware"
 )
 
-func NewRouter(authHandler *handler.AuthHandler, mw *middleware.Middleware, cfg config.Config) *gin.Engine {
+func NewRouter(
+	authHandler *handler.AuthHandler,
+	userHandler *handler.UserHandler,
+	mw *middleware.Middleware,
+	cfg config.Config,
+) *gin.Engine {
 	router := gin.Default()
 
 	// Middlewares
@@ -19,17 +24,19 @@ func NewRouter(authHandler *handler.AuthHandler, mw *middleware.Middleware, cfg 
 		c.JSON(200, gin.H{"message": "pong"})
 	})
 
-	// Auth routes
-	authRoutes := router.Group("/auth")
+	// API v1 routes
+	apiV1 := router.Group("/api/v1")
 	{
-		authRoutes.POST("/login", authHandler.Login)
-	}
+		// Public auth routes
+		authRoutes := apiV1.Group("/auth")
+		authHandler.RegisterRoutes(authRoutes)
 
-	// Private route group
-	v1 := router.Group("/api/v1")
-	v1.Use(mw.AuthMiddleware())
-	{
-		// User routes will be added here
+		// Private routes requiring authentication
+		privateRoutes := apiV1.Group("/")
+		privateRoutes.Use(mw.AuthMiddleware())
+		{
+			userHandler.RegisterRoutes(privateRoutes)
+		}
 	}
 
 	return router

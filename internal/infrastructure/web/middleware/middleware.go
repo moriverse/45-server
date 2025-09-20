@@ -7,114 +7,98 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
-	appUser "github.com/moriverse/45-server/internal/app/user"
 	"github.com/moriverse/45-server/internal/domain/user"
 	"github.com/moriverse/45-server/internal/infrastructure/config"
+	"github.com/moriverse/45-server/internal/infrastructure/web/context"
+	"github.com/moriverse/45-server/internal/infrastructure/web/response"
 	"github.com/moriverse/45-server/internal/utils"
 )
 
-const (
-	LoggerKey = "logger"
-)
-
-// Middleware encapsulates all middleware logic and dependencies.
 type Middleware struct {
-	userService *appUser.Service
-	jwtConfig   config.JWTConfig
-	logger      *slog.Logger
+	jwtConfig config.JWTConfig
+	logger    *slog.Logger
 }
 
-// NewMiddleware creates a new Middleware instance.
-func NewMiddleware(
-	userService *appUser.Service,
-	jwtConfig config.JWTConfig,
-	logger *slog.Logger,
-) *Middleware {
+func NewMiddleware(jwtConfig config.JWTConfig, logger *slog.Logger) *Middleware {
 	return &Middleware{
-		userService: userService,
-		jwtConfig:   jwtConfig,
-		logger:      logger,
+		jwtConfig: jwtConfig,
+		logger:    logger,
 	}
 }
 
-// LoggingMiddleware creates a request-specific logger with a request_id
-// and stores it in the context.
 func (m *Middleware) LoggingMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		requestID := uuid.New().String()
-		requestLogger := m.logger.With("request_id", requestID)
-
-		c.Set(LoggerKey, requestLogger)
-
 		start := time.Now()
 		path := c.Request.URL.Path
 		raw := c.Request.URL.RawQuery
 
 		c.Next()
 
-		latency := time.Since(start)
-		clientIP := c.ClientIP()
-		method := c.Request.Method
-		statusCode := c.Writer.Status()
-		errorMessage := c.Errors.ByType(gin.ErrorTypePrivate).String()
-		bodySize := c.Writer.Size()
-
+		requestLogger := m.logger.With(
+			"method", c.Request.Method,
+			"path", path,
+			"latency", time.Since(start),
+			"clientIP", c.ClientIP(),
+			"statusCode", c.Writer.Status(),
+		)
 		if raw != "" {
-			path = path + "?" + raw
+			requestLogger = requestLogger.With("rawQuery", raw)
 		}
 
-		requestLogger.Info(
-			"Request handled",
-			"status_code", statusCode,
-			"latency", latency,
-			"client_ip", clientIP,
-			"method", method,
-			"path", path,
-			"body_size", bodySize,
-			"error_message", errorMessage,
-		)
+		context.SetLogger(c, requestLogger)
+
+		if c.Writer.Status() >= http.StatusInternalServerError {
+			requestLogger.Error(
+				"Request completed with server error",
+				"errors",
+				c.Errors.ByType(gin.ErrorTypePrivate).String(),
+			)
+		} else if c.Writer.Status() >= http.StatusBadRequest {
+			requestLogger.Warn(
+				"Request completed with client error",
+				"errors",
+				c.Errors.ByType(gin.ErrorTypePrivate).String(),
+			)
+		} else {
+			requestLogger.Info("Request completed successfully")
+		}
 	}
 }
 
-// AuthMiddleware is a Gin middleware for JWT authentication.
 func (m *Middleware) AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			c.AbortWithStatusJSON(
-				http.StatusUnauthorized,
-				gin.H{"error": "Authorization header is missing"},
-			)
+			response.Error(c, http.StatusUnauthorized, response.APIError{
+				Code:    "UNAUTHORIZED",
+				Message: "Authorization header is required.",
+			})
+			c.Abort()
 			return
 		}
 
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			c.AbortWithStatusJSON(
-				http.StatusUnauthorized,
-				gin.H{"error": "Authorization header format is Bearer {token}"},
-			)
+			response.Error(c, http.StatusUnauthorized, response.APIError{
+				Code:    "UNAUTHORIZED",
+				Message: "Authorization header format must be Bearer {token}.",
+			})
+			c.Abort()
 			return
 		}
 
 		tokenString := parts[1]
 		claims, err := utils.ValidateToken(tokenString, m.jwtConfig.SecretKey)
 		if err != nil {
-			c.AbortWithStatusJSON(
-				http.StatusUnauthorized,
-				gin.H{"error": "Invalid or expired token"},
-			)
+			response.Error(c, http.StatusUnauthorized, response.APIError{
+				Code:    "INVALID_TOKEN",
+				Message: err.Error(),
+			})
+			c.Abort()
 			return
 		}
 
-		// Set user ID in context for downstream handlers
-		c.Set("userID", claims.Subject)
-
-		// Update user's last active time
-		userID := user.UserID(claims.Subject)
-		m.userService.UpdateLastActive(c.Request.Context(), userID)
-
+		context.SetUserID(c, user.UserID(claims.Subject))
 		c.Next()
 	}
 }

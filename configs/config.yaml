@@ -16,4 +16,10 @@ redis:
 
 log:
   level: "debug" # debug, info, warn, error
-  format: "text" # text or json 
+  format: "text" # text or json
+
+wechat:
+  app_id: "your-wechat-app-id"
+  app_secret: "your-wechat-app-secret"
+  host: "https://api.weixin.qq.com"
+  code2session_path: "/sns/jscode2session"
